@@ -13,7 +13,7 @@ function Run-ST {
 }
 
 Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host " Synology Wi-Fi Presence Edge Driver v1.0.1" -ForegroundColor Cyan
+Write-Host " Synology Wi-Fi Presence Edge Driver v1.0.3" -ForegroundColor Cyan
 Write-Host " RT2600ac / SRM 1.2.x" -ForegroundColor Cyan
 Write-Host "===============================================" -ForegroundColor Cyan
 Write-Host ""
@@ -31,7 +31,7 @@ Write-Host "Done." -ForegroundColor Green
 Write-Host "Next steps:" -ForegroundColor Green
 Write-Host "1. Open SmartThings app." -ForegroundColor Green
 Write-Host "2. Add device and scan nearby devices." -ForegroundColor Green
-Write-Host "3. Open Synology Wi-Fi Presence device settings." -ForegroundColor Green
+Write-Host "3. Open C.P Synology Wi-Fi Presence device settings." -ForegroundColor Green
 Write-Host "4. Enter router LAN IP, SRM account, password, and phone Wi-Fi MAC addresses." -ForegroundColor Green
 Write-Host "5. Default polling is 15 seconds and away confirmation delay is 120 seconds." -ForegroundColor Green
 Write-Host ""

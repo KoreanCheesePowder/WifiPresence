@@ -1,4 +1,4 @@
-Synology Wi-Fi Presence Edge Driver v1.0.1
+Synology Wi-Fi Presence Edge Driver v1.0.3
 ===========================================
 대상: Synology RT2600ac / SRM 1.2.x
 
@@ -20,7 +20,7 @@ BLE 신호의 -127/LOST를 외출 판단으로 직접 사용하지 않도록 하
 ----
 1. SmartThings CLI가 설치/로그인된 Windows PC에서 SETUP-AND-INSTALL.cmd 실행
 2. SmartThings 앱 -> 기기 추가 -> 주변 검색
-3. 'Synology Wi-Fi Presence' 기기 생성
+3. 'C.P Synology Wi-Fi Presence' 기기 생성
 4. 기기 설정에서 아래 항목 입력
    - 공유기 내부 IP: 보통 192.168.1.1 (실제 환경에 맞게)
    - 포트: HTTP 8000 권장. HTTP가 꺼져 있으면 HTTPS 8001 시도

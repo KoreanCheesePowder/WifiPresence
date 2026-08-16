@@ -7,6 +7,8 @@ components:
         version: 1
       - id: refresh
         version: 1
+      - id: buildbook37604.driverInformation
+        version: 1
     categories:
       - name: PresenceSensor
   - id: phone1

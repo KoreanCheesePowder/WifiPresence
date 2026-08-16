@@ -1,12 +1,14 @@
 local log = require "log"
 local capabilities = require "st.capabilities"
+local driver_info = capabilities["buildbook37604.driverInformation"]
 local Driver = require "st.driver"
 local json = require "st.json"
 local cosock = require "cosock"
 local ltn12 = require "ltn12"
 
 local DRIVER_NAME = "synology-wifi-presence"
-local DRIVER_VERSION = "1.0.0"
+local AUTHOR = "치즈가루"
+local DRIVER_VERSION = "v1.0.3"
 local DEVICE_DNI = "synology-srm-wifi-presence"
 local PROFILE = "synology-wifi-presence"
 local SESSION_NAME = "WiFiPresence"
@@ -371,6 +373,8 @@ local function initialize_defaults(device)
 end
 
 local function device_init(driver, device)
+  device:emit_event(driver_info.author(AUTHOR))
+  device:emit_event(driver_info.driverVersion(DRIVER_VERSION))
   initialize_defaults(device)
   schedule(device)
   device.thread:call_with_delay(2, function() poll(device) end, "initial SRM poll")
@@ -400,11 +404,11 @@ local function discovery_handler(driver, opts, should_continue)
     driver:try_create_device({
       type = "LAN",
       device_network_id = DEVICE_DNI,
-      label = "Synology Wi-Fi Presence",
+      label = "C.P Synology Wi-Fi Presence",
       profile = PROFILE,
       manufacturer = "Synology",
       model = "SRM 1.2 Wi-Fi Presence",
-      vendor_provided_label = "Synology Wi-Fi Presence"
+      vendor_provided_label = "C.P Synology Wi-Fi Presence"
     })
   end
 end
