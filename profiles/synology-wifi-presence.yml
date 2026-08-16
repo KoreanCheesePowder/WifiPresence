@@ -123,17 +123,17 @@ preferences:
       default: 15
   - name: awayGraceSeconds
     title: "외출 확정 지연(초)"
-    description: "Wi-Fi 목록에서 사라진 뒤 이 시간 동안 계속 미접속이어야 외출로 확정합니다. 권장 120초."
+    description: "0이면 SRM에서 오프라인 확인 즉시 외출로 반영합니다. 자동문 연동은 0 권장."
     required: true
     preferenceType: integer
     definition:
-      minimum: 30
+      minimum: 0
       maximum: 1800
-      default: 120
+      default: 0
   - name: assumeMatchOnline
-    title: "상태 필드가 없으면 접속으로 간주"
-    description: "안전 우선 옵션. SRM 응답에 online 필드가 없어도 MAC이 보이면 재실로 처리합니다."
+    title: "상태 필드가 없으면 접속으로 간주 (비권장)"
+    description: "SRM은 연결 해제된 기기도 목록에 남길 수 있습니다. 기본값 OFF 권장. ON이면 MAC이 목록에 남아 있는 동안 재실로 오판할 수 있습니다."
     required: true
     preferenceType: boolean
     definition:
-      default: true
+      default: false

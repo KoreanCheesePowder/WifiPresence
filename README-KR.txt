@@ -1,4 +1,4 @@
-Synology Wi-Fi Presence Edge Driver v1.0.3
+Synology Wi-Fi Presence Edge Driver v1.0.6
 ===========================================
 대상: Synology RT2600ac / SRM 1.2.x
 

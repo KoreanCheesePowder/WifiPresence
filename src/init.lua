@@ -8,7 +8,7 @@ local ltn12 = require "ltn12"
 
 local DRIVER_NAME = "synology-wifi-presence"
 local AUTHOR = "치즈가루"
-local DRIVER_VERSION = "v1.0.3"
+local DRIVER_VERSION = "v1.0.5"
 local DEVICE_DNI = "synology-srm-wifi-presence"
 local PROFILE = "synology-wifi-presence"
 local SESSION_NAME = "WiFiPresence"
@@ -208,11 +208,15 @@ local MAC_KEYS = {
   hwaddr=true, hw_addr=true, hardware_address=true
 }
 local ONLINE_KEYS = {
-  online=true, is_online=true, connected=true, is_connected=true,
-  active=true, is_active=true, is_wifi_connected=true, wifi_connected=true,
-  alive=true, is_alive=true
+  online=true, is_online=true, isonline=true,
+  connected=true, is_connected=true, isconnected=true,
+  active=true, is_active=true, isactive=true,
+  is_wifi_connected=true, iswificonnected=true, wifi_connected=true, wificonnected=true,
+  alive=true, is_alive=true, isalive=true,
+  reachable=true, is_reachable=true, isreachable=true,
+  link=true, linked=true
 }
-local STATUS_KEYS = { status=true, state=true, connection_status=true, connect_status=true }
+local STATUS_KEYS = { status=true, state=true, connection_status=true, connectionstatus=true, connect_status=true, connectstatus=true, connection=true, link_status=true, linkstatus=true }
 
 local function object_mac(t)
   for k, v in pairs(t) do
@@ -224,41 +228,62 @@ local function object_mac(t)
   return nil
 end
 
+local IP_KEYS = { ip=true, ipaddr=true, ip_addr=true, ipaddress=true, ip_address=true, ipv4=true, ipv4_addr=true, address=true }
+
 local function object_online(t)
+  -- SRM 1.2 may keep stale/remembered client flags. A definite OFFLINE value wins.
+  local saw_true = false
+  local saw_explicit = false
   for k, v in pairs(t) do
     if type(k) == "string" then
       local lk = string.lower(k)
-      if ONLINE_KEYS[lk] then
+      if ONLINE_KEYS[lk] or STATUS_KEYS[lk] then
         local b = scalar_online(v)
-        if b ~= nil then return b, true end
+        if b ~= nil then
+          saw_explicit = true
+          if b == false then return false, true end
+          saw_true = true
+        end
       end
     end
   end
+
+  -- On RT2600ac/SRM 1.2, an offline Wi-Fi client can remain in the device list
+  -- while its current IP becomes empty. Treat an explicitly present but empty IP
+  -- field as OFFLINE before accepting stale true flags.
+  local saw_ip_key = false
+  local has_ip = false
   for k, v in pairs(t) do
-    if type(k) == "string" and STATUS_KEYS[string.lower(k)] then
-      local b = scalar_online(v)
-      if b ~= nil then return b, true end
+    if type(k) == "string" and IP_KEYS[string.lower(k)] then
+      saw_ip_key = true
+      local sv = trim(v)
+      if sv ~= "" and sv ~= "0.0.0.0" and sv ~= "-" then has_ip = true end
     end
   end
-  return nil, false
+  if saw_ip_key and not has_ip then return false, true end
+  if saw_true then return true, true end
+  if saw_ip_key and has_ip then return true, true end
+  return nil, saw_explicit
 end
 
 local function find_mac(root, target, assume_match_online, depth)
   depth = depth or 0
-  if depth > 20 or type(root) ~= "table" then return false, false end
+  if depth > 20 or type(root) ~= "table" then return false, false, false end
   local m = object_mac(root)
   if m and m == target then
     local on, explicit = object_online(root)
-    if explicit then return on, true end
-    return assume_match_online, true
+    if explicit then return on, true, true end
+    -- SRM can keep disconnected clients in its remembered-device list.
+    -- Therefore MAC existence alone must NOT mean present by default.
+    return assume_match_online, true, false
   end
   for _, v in pairs(root) do
     if type(v) == "table" then
-      local online, found = find_mac(v, target, assume_match_online, depth + 1)
-      if found then return online, true end
+      local online, found, explicit = find_mac(v, target, assume_match_online, depth + 1)
+      if found then return online, true, explicit end
     end
   end
-  return false, false
+  return false, false, false
 end
 
 local function emit_component(device, component_id, present)
@@ -283,12 +308,13 @@ local function apply_phone_state(device, idx, seen_online, found_in_payload, now
   end
 
   local missing_key = "missing_since_" .. idx
-  local missing_since = tonumber(device:get_field(missing_key))
+  local missing_raw = device:get_field(missing_key)
+  local missing_since = missing_raw ~= nil and tonumber(missing_raw) or nil
   if not missing_since then
     missing_since = now
     device:set_field(missing_key, missing_since, { persist = true })
   end
-  local grace = tonumber(pref(device, "awayGraceSeconds", 120)) or 120
+  local grace = tonumber(pref(device, "awayGraceSeconds", 0)) or 0
   local elapsed = math.max(0, now - missing_since)
   if elapsed >= grace then
     emit_component(device, component, false)
@@ -313,7 +339,7 @@ local function poll(device)
     logout(device, sid)
     if not payload then error(ferr or "device list failed") end
 
-    local assume_online = pref(device, "assumeMatchOnline", true)
+    local assume_online = pref(device, "assumeMatchOnline", false)
     local now = now_s()
     local any_present = false
     local configured = 0
@@ -322,8 +348,22 @@ local function poll(device)
       local mac = normalize_mac(pref(device, PHONE_PREFS[i], ""))
       if mac then
         configured = configured + 1
-        local online, found = find_mac(payload, mac, assume_online)
-        log.info(string.format("PHONE%d mac=%s found=%s online=%s", i, mac, tostring(found), tostring(online)))
+        local online, found, explicit = find_mac(payload, mac, assume_online)
+        log.info(string.format("PHONE%d mac=%s found=%s online=%s explicit=%s", i, mac, tostring(found), tostring(online), tostring(explicit)))
+        if found then
+          local function log_match(root, depth)
+            depth = depth or 0
+            if depth > 20 or type(root) ~= "table" then return false end
+            if object_mac(root) == mac then
+              local okj, raw = pcall(json.encode, root)
+              if okj then log.info(string.format("PHONE%d SRM_OBJECT=%s", i, raw)) end
+              return true
+            end
+            for _, vv in pairs(root) do if type(vv) == "table" and log_match(vv, depth + 1) then return true end end
+            return false
+          end
+          log_match(payload, 0)
+        end
         local effective = apply_phone_state(device, i, online, found, now)
         if effective then any_present = true end
       else
