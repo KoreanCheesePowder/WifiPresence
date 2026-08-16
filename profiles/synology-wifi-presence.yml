@@ -1,0 +1,137 @@
+name: synology-wifi-presence
+components:
+  - id: main
+    label: "전체 Wi-Fi 재실"
+    capabilities:
+      - id: presenceSensor
+        version: 1
+      - id: refresh
+        version: 1
+    categories:
+      - name: PresenceSensor
+  - id: phone1
+    label: "핸드폰 1"
+    capabilities:
+      - id: presenceSensor
+        version: 1
+    categories:
+      - name: PresenceSensor
+  - id: phone2
+    label: "핸드폰 2"
+    capabilities:
+      - id: presenceSensor
+        version: 1
+    categories:
+      - name: PresenceSensor
+  - id: phone3
+    label: "핸드폰 3"
+    capabilities:
+      - id: presenceSensor
+        version: 1
+    categories:
+      - name: PresenceSensor
+  - id: phone4
+    label: "핸드폰 4"
+    capabilities:
+      - id: presenceSensor
+        version: 1
+    categories:
+      - name: PresenceSensor
+preferences:
+  - name: routerHost
+    title: "시놀로지 공유기 내부 IP/호스트"
+    description: "예: 192.168.1.1. DDNS 주소보다 내부 IP 사용을 권장합니다."
+    required: true
+    preferenceType: string
+    definition:
+      stringType: text
+      default: "192.168.1.1"
+  - name: routerPort
+    title: "SRM 포트"
+    description: "HTTP는 보통 8000, HTTPS는 8001입니다."
+    required: true
+    preferenceType: integer
+    definition:
+      minimum: 1
+      maximum: 65535
+      default: 8000
+  - name: useHttps
+    title: "HTTPS 사용"
+    description: "SRM에서 HTTP가 꺼져 있으면 켜세요. 자체 인증서 환경에서는 실패할 수 있어 로컬 HTTP가 더 단순합니다."
+    required: true
+    preferenceType: boolean
+    definition:
+      default: false
+  - name: username
+    title: "SRM 계정"
+    description: "접속 장치 목록을 읽을 전용 계정을 권장합니다."
+    required: true
+    preferenceType: string
+    definition:
+      stringType: text
+      default: ""
+  - name: password
+    title: "SRM 비밀번호"
+    description: "전용 계정을 사용하세요."
+    required: true
+    preferenceType: string
+    definition:
+      stringType: text
+      default: ""
+  - name: phone1Mac
+    title: "핸드폰 1 Wi-Fi MAC"
+    description: "SRM 장치 목록에 표시되는 MAC 주소. 비공개/랜덤 MAC을 쓰면 그 주소를 입력하세요."
+    required: false
+    preferenceType: string
+    definition:
+      stringType: text
+      default: ""
+  - name: phone2Mac
+    title: "핸드폰 2 Wi-Fi MAC"
+    description: "SRM 장치 목록에 표시되는 MAC 주소"
+    required: false
+    preferenceType: string
+    definition:
+      stringType: text
+      default: ""
+  - name: phone3Mac
+    title: "핸드폰 3 Wi-Fi MAC"
+    description: "SRM 장치 목록에 표시되는 MAC 주소"
+    required: false
+    preferenceType: string
+    definition:
+      stringType: text
+      default: ""
+  - name: phone4Mac
+    title: "핸드폰 4 Wi-Fi MAC"
+    description: "SRM 장치 목록에 표시되는 MAC 주소"
+    required: false
+    preferenceType: string
+    definition:
+      stringType: text
+      default: ""
+  - name: pollSeconds
+    title: "조회 주기(초)"
+    description: "권장 15초. 너무 짧게 하면 공유기에 불필요한 부하가 생깁니다."
+    required: true
+    preferenceType: integer
+    definition:
+      minimum: 10
+      maximum: 300
+      default: 15
+  - name: awayGraceSeconds
+    title: "외출 확정 지연(초)"
+    description: "Wi-Fi 목록에서 사라진 뒤 이 시간 동안 계속 미접속이어야 외출로 확정합니다. 권장 120초."
+    required: true
+    preferenceType: integer
+    definition:
+      minimum: 30
+      maximum: 1800
+      default: 120
+  - name: assumeMatchOnline
+    title: "상태 필드가 없으면 접속으로 간주"
+    description: "안전 우선 옵션. SRM 응답에 online 필드가 없어도 MAC이 보이면 재실로 처리합니다."
+    required: true
+    preferenceType: boolean
+    definition:
+      default: true
