@@ -8,7 +8,7 @@ local ltn12 = require "ltn12"
 
 local DRIVER_NAME = "synology-wifi-presence"
 local AUTHOR = "치즈가루"
-local DRIVER_VERSION = "v1.0.5"
+local DRIVER_VERSION = "v1.0.7"
 local DEVICE_DNI = "synology-srm-wifi-presence"
 local PROFILE = "synology-wifi-presence"
 local SESSION_NAME = "WiFiPresence"
@@ -231,7 +231,7 @@ end
 local IP_KEYS = { ip=true, ipaddr=true, ip_addr=true, ipaddress=true, ip_address=true, ipv4=true, ipv4_addr=true, address=true }
 
 local function object_online(t)
-  -- SRM 1.2 may keep stale/remembered client flags. A definite OFFLINE value wins.
+  -- Explicit offline wins immediately.
   local saw_true = false
   local saw_explicit = false
   for k, v in pairs(t) do
@@ -248,9 +248,20 @@ local function object_online(t)
     end
   end
 
-  -- On RT2600ac/SRM 1.2, an offline Wi-Fi client can remain in the device list
-  -- while its current IP becomes empty. Treat an explicitly present but empty IP
-  -- field as OFFLINE before accepting stale true flags.
+  -- RT2600ac/SRM 1.2 fast-offline signature. This combination was observed
+  -- when a phone is already offline, even though remembered client records remain.
+  local band = trim(t.band)
+  local current_rate = tonumber(t.current_rate)
+  local max_rate = tonumber(t.max_rate)
+  local mesh_node_id = tonumber(t.mesh_node_id)
+  local signalstrength = tonumber(t.signalstrength)
+  local fast_offline = (band == "")
+    and (current_rate == 0)
+    and (max_rate == 0)
+    and (mesh_node_id == -1)
+    and (signalstrength == 0)
+  if fast_offline then return false, true end
+
   local saw_ip_key = false
   local has_ip = false
   for k, v in pairs(t) do
@@ -389,7 +400,7 @@ end
 local function schedule(device)
   local old = device:get_field("poll_timer")
   if old then pcall(function() device.thread:cancel_timer(old) end) end
-  local interval = tonumber(pref(device, "pollSeconds", 15)) or 15
+  local interval = tonumber(pref(device, "pollSeconds", 5)) or 5
   if interval < 10 then interval = 10 end
   local timer = device.thread:call_on_schedule(interval, function()
     poll(device)

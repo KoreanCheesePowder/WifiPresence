@@ -114,13 +114,13 @@ preferences:
       default: ""
   - name: pollSeconds
     title: "조회 주기(초)"
-    description: "권장 15초. 너무 짧게 하면 공유기에 불필요한 부하가 생깁니다."
+    description: "권장 5초. RT2600ac 접속/해제 상태를 빠르게 반영합니다."
     required: true
     preferenceType: integer
     definition:
-      minimum: 10
+      minimum: 3
       maximum: 300
-      default: 15
+      default: 5
   - name: awayGraceSeconds
     title: "외출 확정 지연(초)"
     description: "0이면 SRM에서 오프라인 확인 즉시 외출로 반영합니다. 자동문 연동은 0 권장."
