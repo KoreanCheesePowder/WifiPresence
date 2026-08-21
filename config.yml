@@ -1,4 +1,4 @@
-name: C.P Synology Wi-Fi Presence
+name: 치즈가루 Synology Wi-Fi 재실
 packageKey: synology-wifi-presence-srm12
 permissions:
   lan: {}
