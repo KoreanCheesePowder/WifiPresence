@@ -1,0 +1,5 @@
+name: C.P Synology Wi-Fi Presence
+packageKey: synology-wifi-presence-srm12
+permissions:
+  lan: {}
+  discovery: {}
