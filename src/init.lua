@@ -1,6 +1,7 @@
 local log = require "log"
 local capabilities = require "st.capabilities"
 local driver_info = capabilities["buildbook37604.driverInformation"]
+local driver_status = capabilities["buildbook37604.synologydriverstatusv111"]
 local Driver = require "st.driver"
 local json = require "st.json"
 local cosock = require "cosock"
@@ -8,9 +9,9 @@ local ltn12 = require "ltn12"
 
 local DRIVER_NAME = "synology-wifi-presence"
 local AUTHOR = "치즈가루"
-local DRIVER_VERSION = "v1.0.8"
+local DRIVER_VERSION = "v1.1.6"
 local DEVICE_DNI = "synology-srm-wifi-presence"
-local PROFILE = "synology-wifi-presence"
+local PROFILE = "synology-wifi-presence-v116"
 local SESSION_NAME = "WiFiPresence"
 local API_DEVICE = "SYNO.Core.Network.NSM.Device"
 local METHOD_CANDIDATES = { "get", "list", "load", "get_list", "list_devices", "query" }
@@ -46,6 +47,12 @@ local function pref(device, name, default)
   local v = device.preferences and device.preferences[name]
   if v == nil or v == "" then return default end
   return v
+end
+
+local function credentials_configured(device)
+  local username = trim(pref(device, "username", ""))
+  local password = tostring(pref(device, "password", ""))
+  return username ~= "" and password ~= ""
 end
 
 local function base_url(device)
@@ -291,6 +298,33 @@ local function emit_component(device, component_id, present)
   device:emit_component_event(device.profile.components[component_id], event)
 end
 
+local function set_all_not_present(device)
+  for i = 1, 4 do
+    device:set_field("missing_since_" .. i, nil, { persist = true })
+    device:set_field("offline_count_" .. i, 0, { persist = true })
+    emit_component(device, PHONE_COMPONENTS[i], false)
+  end
+  device:emit_event(capabilities.presenceSensor.presence.not_present())
+end
+
+local function emit_driver_status(device, text)
+  local component = device.profile.components["driverStatus"]
+  if not component or not driver_status then return end
+  device:emit_component_event(component, driver_status.status({ value = tostring(text or "") }))
+end
+
+local function emit_creator_info(device)
+  local component = device.profile.components["creatorInfo"]
+  if not component then return end
+  device:emit_component_event(component, driver_info.author(AUTHOR))
+  device:emit_component_event(component, driver_info.driverVersion(DRIVER_VERSION))
+end
+
+local function set_error_state(device, message)
+  set_all_not_present(device)
+  emit_driver_status(device, "오류: " .. tostring(message or "알 수 없는 오류"))
+end
+
 local function apply_phone_state(device, idx, seen_online, found_in_payload, now)
   local component = PHONE_COMPONENTS[idx]
   local mac = normalize_mac(pref(device, PHONE_PREFS[idx], ""))
@@ -336,6 +370,10 @@ local function apply_phone_state(device, idx, seen_online, found_in_payload, now
 end
 
 local function poll(device)
+  if not credentials_configured(device) then
+    set_error_state(device, "SRM 계정 또는 비밀번호가 설정되지 않음")
+    return
+  end
   if device:get_field("poll_in_progress") then return end
   device:set_field("poll_in_progress", true)
 
@@ -384,47 +422,67 @@ local function poll(device)
       device:emit_event(any_present and capabilities.presenceSensor.presence.present() or capabilities.presenceSensor.presence.not_present())
     end
     device:set_field("last_poll_ok", now, { persist = true })
+    emit_driver_status(device, "정상")
   end)
 
   device:set_field("poll_in_progress", false)
   if not ok then
-    -- Fail safe: never change presence to away when SRM/API itself is unavailable.
-    log.error("SRM poll failed: " .. tostring(err))
+    local message = tostring(err)
+    set_error_state(device, message)
+    log.error("SRM poll failed: " .. message)
   end
 end
 
 local function schedule(device)
   local old = device:get_field("poll_timer")
   if old then pcall(function() device.thread:cancel_timer(old) end) end
+  device:set_field("poll_timer", nil)
+
+  -- Do not start a repeating SRM login loop until both credentials exist.
+  -- infoChanged will call schedule() again as soon as the settings are saved.
+  if not credentials_configured(device) then
+    set_error_state(device, "SRM 계정 또는 비밀번호가 설정되지 않음")
+    return false
+  end
+
   local interval = tonumber(pref(device, "pollSeconds", 15)) or 15
   if interval < 10 then interval = 10 end
   local timer = device.thread:call_on_schedule(interval, function()
     poll(device)
   end, "synology wifi presence poll")
   device:set_field("poll_timer", timer)
+  return true
 end
 
 local function initialize_defaults(device)
-  -- Until the first successful SRM query, configured phones are treated as present.
-  -- This prevents an API/router problem from creating a false-away condition.
-  local any = false
-  for i = 1, 4 do
-    if normalize_mac(pref(device, PHONE_PREFS[i], "")) then
-      emit_component(device, PHONE_COMPONENTS[i], true)
-      any = true
-    else
-      emit_component(device, PHONE_COMPONENTS[i], false)
-    end
-  end
-  device:emit_event(any and capabilities.presenceSensor.presence.present() or capabilities.presenceSensor.presence.not_present())
+  -- 재시작/설정 변경 직후에는 SRM 확인 전까지 미감지로 시작한다.
+  -- 실제 재실 상태는 성공한 SRM 폴링 결과로만 present가 된다.
+  set_all_not_present(device)
 end
 
 local function device_init(driver, device)
-  device:emit_event(driver_info.author(AUTHOR))
-  device:emit_event(driver_info.driverVersion(DRIVER_VERSION))
+  -- v1.1.6 uses a new profile name so existing devices are actually migrated
+  -- to the corrected component order. Reusing the old profile name leaves the
+  -- cloud-side component order from the first installation unchanged.
+  local ok_profile, profile_err = pcall(function()
+    device:try_update_metadata({ profile = PROFILE })
+  end)
+  if not ok_profile then
+    log.warn("Profile migration failed: " .. tostring(profile_err))
+  end
+
   initialize_defaults(device)
-  schedule(device)
-  device.thread:call_with_delay(2, function() poll(device) end, "initial SRM poll")
+  emit_creator_info(device)
+  if credentials_configured(device) then
+    emit_driver_status(device, "SRM 연결 확인 중")
+  else
+    emit_driver_status(device, "오류: SRM 계정 또는 비밀번호가 설정되지 않음")
+  end
+  if schedule(device) then
+    device.thread:call_with_delay(2, function() poll(device) end, "initial SRM poll")
+  else
+    log.warn("SRM credentials are not configured; polling is paused until settings are saved")
+  end
 end
 
 local function info_changed(driver, device, event, args)
@@ -435,11 +493,22 @@ local function info_changed(driver, device, event, args)
     device:set_field("offline_count_" .. i, 0, { persist = true })
   end
   initialize_defaults(device)
-  schedule(device)
-  device.thread:call_with_delay(1, function() poll(device) end, "SRM poll after settings change")
+  emit_creator_info(device)
+  if credentials_configured(device) then
+    emit_driver_status(device, "SRM 연결 확인 중")
+  else
+    emit_driver_status(device, "오류: SRM 계정 또는 비밀번호가 설정되지 않음")
+  end
+  if schedule(device) then
+    device.thread:call_with_delay(1, function() poll(device) end, "SRM poll after settings change")
+  end
 end
 
 local function refresh_handler(driver, device, command)
+  if not credentials_configured(device) then
+    set_error_state(device, "SRM 계정 또는 비밀번호가 설정되지 않음")
+    return
+  end
   device.thread:call_with_delay(0, function() poll(device) end, "manual SRM refresh")
 end
 

@@ -1,41 +1,53 @@
-name: synology-wifi-presence
+name: synology-wifi-presence-v116
 components:
   - id: main
-    label: "전체 Wi-Fi 재실"
+    label: "전체 WIFI 재실 상태"
     capabilities:
       - id: presenceSensor
         version: 1
       - id: refresh
         version: 1
-      - id: buildbook37604.driverInformation
-        version: 1
     categories:
       - name: PresenceSensor
   - id: phone1
-    label: "핸드폰 1"
+    label: "핸드폰 1 재실 상태"
     capabilities:
       - id: presenceSensor
         version: 1
     categories:
       - name: PresenceSensor
   - id: phone2
-    label: "핸드폰 2"
+    label: "핸드폰 2 재실 상태"
     capabilities:
       - id: presenceSensor
         version: 1
     categories:
       - name: PresenceSensor
   - id: phone3
-    label: "핸드폰 3"
+    label: "핸드폰 3 재실 상태"
     capabilities:
       - id: presenceSensor
         version: 1
     categories:
       - name: PresenceSensor
   - id: phone4
-    label: "핸드폰 4"
+    label: "핸드폰 4 재실 상태"
     capabilities:
       - id: presenceSensor
+        version: 1
+    categories:
+      - name: PresenceSensor
+  - id: driverStatus
+    label: "드라이버 상태"
+    capabilities:
+      - id: buildbook37604.synologydriverstatusv111
+        version: 1
+    categories:
+      - name: PresenceSensor
+  - id: creatorInfo
+    label: "제작자 정보"
+    capabilities:
+      - id: buildbook37604.driverInformation
         version: 1
     categories:
       - name: PresenceSensor
