@@ -1,3 +1,5 @@
+local CP_MONITOR_META = { driver_name = "C.P Synology Wi-Fi Presence", driver_version = "v1.1.7", package_key = "synology-wifi-presence-srm12", target_name = "Synology SRM", host_pref = "routerHost", port_pref = "routerPort", transport = "http" }
+local cp_monitor = require "cp_monitor"
 local log = require "log"
 local capabilities = require "st.capabilities"
 local driver_info = capabilities["buildbook37604.driverInformation"]
@@ -9,7 +11,7 @@ local ltn12 = require "ltn12"
 
 local DRIVER_NAME = "synology-wifi-presence"
 local AUTHOR = "치즈가루"
-local DRIVER_VERSION = "v1.1.6"
+local DRIVER_VERSION = "v1.1.7"
 local DEVICE_DNI = "synology-srm-wifi-presence"
 local PROFILE = "synology-wifi-presence-v116"
 local SESSION_NAME = "WiFiPresence"
@@ -89,8 +91,10 @@ local function http_request(device, path, query)
     req.options = "all"
   end
 
+  pcall(cp_monitor.tx, device, 1, "SRM HTTP")
   local ok, code, headers, status = mod.request(req)
   local body = table.concat(body_t)
+  pcall(cp_monitor.rx, device, #body, "SRM HTTP "..tostring(code))
   if not ok then
     return nil, tostring(code or "request failed")
   end
@@ -422,12 +426,14 @@ local function poll(device)
       device:emit_event(any_present and capabilities.presenceSensor.presence.present() or capabilities.presenceSensor.presence.not_present())
     end
     device:set_field("last_poll_ok", now, { persist = true })
+    pcall(cp_monitor.poll, device, true)
     emit_driver_status(device, "정상")
   end)
 
   device:set_field("poll_in_progress", false)
   if not ok then
     local message = tostring(err)
+    pcall(cp_monitor.poll, device, false, message)
     set_error_state(device, message)
     log.error("SRM poll failed: " .. message)
   end
@@ -461,7 +467,8 @@ local function initialize_defaults(device)
 end
 
 local function device_init(driver, device)
-  -- v1.1.6 uses a new profile name so existing devices are actually migrated
+  pcall(cp_monitor.start, device, CP_MONITOR_META)
+  -- v1.1.7 uses a new profile name so existing devices are actually migrated
   -- to the corrected component order. Reusing the old profile name leaves the
   -- cloud-side component order from the first installation unchanged.
   local ok_profile, profile_err = pcall(function()
