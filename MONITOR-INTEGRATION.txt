@@ -1,9 +1,11 @@
-치즈가루 시스템 모니터 연동 업데이트
-기존 버전: v1.1.6
-업데이트 버전: v1.1.7
+치즈가루 시스템 모니터 연동 / SRM API 안정화 업데이트
+기존 버전: v1.1.7
+업데이트 버전: v1.1.8
 
-- 기존 Capability / Profile / PackageKey / 제어 로직 유지
-- 60초 주기 Edge Heartbeat 추가
-- 모니터 전송 실패는 기존 동작 및 온라인/오프라인 판정에 영향을 주지 않음
-- UDP 8791 텔레메트리 사용
-- 기존 LAN/RS485/Zigbee/NAS 통신 로직은 그대로 유지하며 카운터 기록만 추가
+- 기존 Capability / Profile / PackageKey / 재실 판정 로직 유지
+- SYNO.Core.Network.NSM.Device 조회 후보에서 잘못된 method=query 제거
+- 마지막으로 성공한 SRM method/version 조합을 최우선으로 재사용
+- 이전 버전에서 저장됐을 수 있는 잘못된 query 캐시 자동 폐기
+- SRM 로그인/세션/API 조회가 일시 실패하면 1회 재로그인 후 재시도
+- 재시도까지 실패한 경우에만 기존대로 전체 WIFI 및 핸드폰 1~4를 미감지 처리하고 오류 표시
+- 60초 주기 Edge Heartbeat 및 UDP 8791 시스템 모니터 연동 유지

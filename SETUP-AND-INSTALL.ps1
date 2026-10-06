@@ -23,7 +23,7 @@ function Run-ST {
 }
 
 Write-Host "===============================================" -ForegroundColor Cyan
-Write-Host " Synology Wi-Fi Presence Edge Driver v1.1.6" -ForegroundColor Cyan
+Write-Host " Synology Wi-Fi Presence Edge Driver v1.1.8" -ForegroundColor Cyan
 Write-Host " RT2600ac / SRM 1.2.x" -ForegroundColor Cyan
 Write-Host "===============================================" -ForegroundColor Cyan
 Write-Host ""

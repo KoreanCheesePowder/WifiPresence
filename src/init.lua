@@ -1,4 +1,4 @@
-local CP_MONITOR_META = { driver_name = "C.P Synology Wi-Fi Presence", driver_version = "v1.1.7", package_key = "synology-wifi-presence-srm12", target_name = "Synology SRM", host_pref = "routerHost", port_pref = "routerPort", transport = "http" }
+local CP_MONITOR_META = { driver_name = "C.P Synology Wi-Fi Presence", driver_version = "v1.1.8", package_key = "synology-wifi-presence-srm12", target_name = "Synology SRM", host_pref = "routerHost", port_pref = "routerPort", transport = "http" }
 local cp_monitor = require "cp_monitor"
 local log = require "log"
 local capabilities = require "st.capabilities"
@@ -11,12 +11,12 @@ local ltn12 = require "ltn12"
 
 local DRIVER_NAME = "synology-wifi-presence"
 local AUTHOR = "치즈가루"
-local DRIVER_VERSION = "v1.1.7"
+local DRIVER_VERSION = "v1.1.8"
 local DEVICE_DNI = "synology-srm-wifi-presence"
 local PROFILE = "synology-wifi-presence-v116"
 local SESSION_NAME = "WiFiPresence"
 local API_DEVICE = "SYNO.Core.Network.NSM.Device"
-local METHOD_CANDIDATES = { "get", "list", "load", "get_list", "list_devices", "query" }
+local METHOD_CANDIDATES = { "get", "list", "load", "get_list", "list_devices" }
 local PHONE_COMPONENTS = { "phone1", "phone2", "phone3", "phone4" }
 local PHONE_PREFS = { "phone1Mac", "phone2Mac", "phone3Mac", "phone4Mac" }
 
@@ -165,43 +165,97 @@ local function logout(device, sid)
   pcall(http_request, device, "/webapi/auth.cgi", q)
 end
 
+local function is_device_method_candidate(method)
+  for _, m in ipairs(METHOD_CANDIDATES) do
+    if m == method then return true end
+  end
+  return false
+end
+
 local function fetch_devices(device, sid, api_meta)
   api_meta = api_meta or {}
   local path = api_meta.path or "entry.cgi"
-  local max_ver = tonumber(api_meta.maxVersion) or 1
-  local cached = device:get_field("srm_device_method")
-  local methods = {}
-  if cached and cached ~= "" then table.insert(methods, cached) end
-  for _, m in ipairs(METHOD_CANDIDATES) do
-    if m ~= cached then table.insert(methods, m) end
+  local min_ver = tonumber(api_meta.minVersion) or 1
+  local max_ver = tonumber(api_meta.maxVersion) or min_ver
+  if min_ver < 1 then min_ver = 1 end
+  if max_ver < min_ver then max_ver = min_ver end
+
+  local cached_method = device:get_field("srm_device_method")
+  local cached_ver = tonumber(device:get_field("srm_device_version"))
+
+  -- Older builds could fall through to method=query for the device API.
+  -- query belongs to SYNO.API.Info and must never be reused for
+  -- SYNO.Core.Network.NSM.Device. Drop any stale cached value.
+  if cached_method and not is_device_method_candidate(cached_method) then
+    log.warn("Discarding unsupported cached SRM device method: " .. tostring(cached_method))
+    device:set_field("srm_device_method", nil, { persist = true })
+    device:set_field("srm_device_version", nil, { persist = true })
+    cached_method = nil
+    cached_ver = nil
   end
 
+  local attempted = {}
   local last_err = "no method succeeded"
-  for _, method in ipairs(methods) do
-    for ver = max_ver, 1, -1 do
-      local q = table.concat({
-        "api=" .. urlencode(API_DEVICE),
-        "version=" .. tostring(ver),
-        "method=" .. urlencode(method),
-        "_sid=" .. urlencode(sid)
-      }, "&")
-      local body, err = http_request(device, "/webapi/" .. path, q)
-      if body then
-        local data, jerr = decode(body)
-        if data and data.success then
-          device:set_field("srm_device_method", method, { persist = true })
-          device:set_field("srm_device_version", ver, { persist = true })
-          log.info(string.format("SRM device API OK: method=%s version=%d", method, ver))
-          return data.data or data, nil
-        end
-        local code = data and data.error and data.error.code
-        last_err = string.format("method=%s v%d API error=%s %s", method, ver, tostring(code or "?"), tostring(jerr or ""))
-      else
-        last_err = string.format("method=%s v%d %s", method, ver, tostring(err))
-      end
+
+  local function attempt(method, ver)
+    if not method or not ver or ver < min_ver or ver > max_ver then return nil end
+    local key = tostring(method) .. ":" .. tostring(ver)
+    if attempted[key] then return nil end
+    attempted[key] = true
+
+    local q = table.concat({
+      "api=" .. urlencode(API_DEVICE),
+      "version=" .. tostring(ver),
+      "method=" .. urlencode(method),
+      "_sid=" .. urlencode(sid)
+    }, "&")
+    local body, err = http_request(device, "/webapi/" .. path, q)
+    if not body then
+      last_err = string.format("method=%s v%d %s", method, ver, tostring(err))
+      log.warn("SRM device API attempt failed: " .. last_err)
+      return nil
+    end
+
+    local data, jerr = decode(body)
+    if data and data.success then
+      device:set_field("srm_device_method", method, { persist = true })
+      device:set_field("srm_device_version", ver, { persist = true })
+      log.info(string.format("SRM device API OK: method=%s version=%d", method, ver))
+      return data.data or data
+    end
+
+    local code = data and data.error and data.error.code
+    last_err = string.format("method=%s v%d API error=%s %s", method, ver, tostring(code or "?"), tostring(jerr or ""))
+    log.warn("SRM device API attempt failed: " .. last_err)
+    return nil
+  end
+
+  -- First use the exact method/version pair that previously succeeded.
+  if cached_method and cached_ver then
+    local payload = attempt(cached_method, cached_ver)
+    if payload then return payload, nil end
+  end
+
+  -- Only probe known device-list methods. method=query is intentionally not
+  -- included here because it is valid for SYNO.API.Info, not this API.
+  for _, method in ipairs(METHOD_CANDIDATES) do
+    for ver = max_ver, min_ver, -1 do
+      local payload = attempt(method, ver)
+      if payload then return payload, nil end
     end
   end
+
   return nil, last_err
+end
+
+local function fetch_authenticated_devices(device)
+  local sid, api_meta, lerr = login(device)
+  if not sid then return nil, lerr or "login failed" end
+
+  local payload, ferr = fetch_devices(device, sid, api_meta)
+  logout(device, sid)
+  if not payload then return nil, ferr or "device list failed" end
+  return payload, nil
 end
 
 local function scalar_online(v)
@@ -382,10 +436,15 @@ local function poll(device)
   device:set_field("poll_in_progress", true)
 
   local ok, err = pcall(function()
-    local sid, api_meta, lerr = login(device)
-    if not sid then error(lerr or "login failed") end
-    local payload, ferr = fetch_devices(device, sid, api_meta)
-    logout(device, sid)
+    local payload, ferr = fetch_authenticated_devices(device)
+    if not payload then
+      -- A short SRM/session hiccup must not immediately force an error state.
+      -- Re-login once and retry the previously known API before declaring the
+      -- poll failed. If the retry also fails, the existing fail-safe behavior
+      -- still marks every presence component NOT PRESENT.
+      log.warn("SRM poll first attempt failed; retrying once: " .. tostring(ferr))
+      payload, ferr = fetch_authenticated_devices(device)
+    end
     if not payload then error(ferr or "device list failed") end
 
     local assume_online = pref(device, "assumeMatchOnline", false)
@@ -468,7 +527,7 @@ end
 
 local function device_init(driver, device)
   pcall(cp_monitor.start, device, CP_MONITOR_META)
-  -- v1.1.7 uses a new profile name so existing devices are actually migrated
+  -- v1.1.7 introduced this profile name so existing devices are actually migrated
   -- to the corrected component order. Reusing the old profile name leaves the
   -- cloud-side component order from the first installation unchanged.
   local ok_profile, profile_err = pcall(function()

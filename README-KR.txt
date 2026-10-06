@@ -1,4 +1,4 @@
-C.P Synology Wi-Fi Presence v1.1.6
+C.P Synology Wi-Fi Presence v1.1.8
 
 상세 화면 순서
 1. 전체 WIFI 재실 상태
